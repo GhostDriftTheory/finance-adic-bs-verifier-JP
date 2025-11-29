@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BSモデル完全保証デモ v4.0</title>
+    <title>BSモデル完全保証デモ v4.2</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -57,13 +57,15 @@
         import { createRoot } from 'react-dom/client';
         import { 
             ShieldCheck, Database, Calculator, Lock, CheckCircle, XCircle, 
-            BookOpen, Info, Hash, Upload, Copy, Check, Download, RotateCcw
+            BookOpen, Info, Hash, Upload, Copy, Check, Download, RotateCcw,
+            ArrowRight, Settings, List
         } from 'lucide-react';
 
         /**
-         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.1: JP Localized & Mobile Optimized)
-         * - 全UI要素を平易な日本語に翻訳
-         * - スマホでのタップ領域と可読性を最適化
+         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.2: Mobile UX Fixed)
+         * - スマホ初期表示を「説明・設定」タブに固定し、ファーストビューで目的を伝達
+         * - タブ切り替えUIを復活させ、情報の視認性を確保
+         * - Verify後の導線を強化
          */
 
         // --- 1. Global Certificate Constants ---
@@ -223,7 +225,13 @@
             const [isVerifying, setIsVerifying] = useState(false);
             const [verifiedLedger, setVerifiedLedger] = useState(null);
             const [certRange, setCertRange] = useState(null);
-            const [activeTab, setActiveTab] = useState('live'); 
+            
+            // Mobile Tab State: 'setup' (説明・設定) | 'ledger' (台帳)
+            const [activeMobileTab, setActiveMobileTab] = useState('setup');
+            
+            // Ledger Pane Tab State: 'live' | 'import'
+            const [activeLedgerTab, setActiveLedgerTab] = useState('live'); 
+            
             const [copied, setCopied] = useState(false);
             const [importJson, setImportJson] = useState('');
             const [importResult, setImportResult] = useState(null);
@@ -244,14 +252,17 @@
                     const verifyResult = await verifyLedger(result.ledger);
                     setVerifiedLedger(verifyResult.rows);
                     setIsVerifying(false);
-                    if (verifyResult.ok) setCertRange({ min: result.c_min, max: result.c_max });
+                    if (verifyResult.ok) {
+                        setCertRange({ min: result.c_min, max: result.c_max });
+                        // 検証完了時にユーザーに気付かせる（タブ遷移は自動で行わないが、UIで誘導）
+                    }
                 }, 600);
             };
 
             const handleDownload = () => {
                 if (!result) return;
                 const dataToSave = {
-                    kernel: "FinanceAdic-BS-v4.1-JP",
+                    kernel: "FinanceAdic-BS-v4.2-JP",
                     domain: DOMAIN_D,
                     delta_price_global: DELTA_PRICE_GLOBAL,
                     rootHash: result.rootHash,
@@ -307,7 +318,7 @@
                             </div>
                             <div>
                                 <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
-                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.0</span>
+                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.2</span>
                                 </h1>
                                 <p className="text-[10px] text-slate-400">構造可視化・完全保証デモ</p>
                             </div>
@@ -318,13 +329,29 @@
                         </div>
                     </header>
 
-                    <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    {/* Mobile Tab Navigation */}
+                    <div className="flex md:hidden border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
+                        <button 
+                            onClick={() => setActiveMobileTab('setup')}
+                            className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${activeMobileTab === 'setup' ? 'text-white border-b-2 border-indigo-500' : 'text-slate-500'}`}
+                        >
+                            <Settings className="w-3.5 h-3.5" /> 説明・設定
+                        </button>
+                        <button 
+                            onClick={() => setActiveMobileTab('ledger')}
+                            className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${activeMobileTab === 'ledger' ? 'text-white border-b-2 border-indigo-500' : 'text-slate-500'}`}
+                        >
+                            <List className="w-3.5 h-3.5" /> 証明台帳
+                        </button>
+                    </div>
+
+                    <main className="flex-1 flex overflow-hidden relative">
                         
-                        {/* LEFT PANE: 設定 & 証明 */}
-                        <aside className="w-full md:w-[420px] border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/30 flex flex-col overflow-y-auto">
+                        {/* LEFT PANE: 設定 & 証明 (スマホ: setupタブ時のみ, PC: 常時表示) */}
+                        <aside className={`w-full md:w-[420px] border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/30 flex flex-col overflow-y-auto absolute md:relative inset-0 z-10 md:z-auto bg-slate-950 md:bg-transparent transition-opacity duration-200 ${activeMobileTab === 'setup' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
                             <div className="p-4 md:p-6 space-y-6">
                                 
-                                {/* 目的・意義 */}
+                                {/* 目的・意義 (最重要: ファーストビュー) */}
                                 <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 shadow-sm">
                                     <h2 className="text-xs font-bold text-white flex items-center gap-2 mb-3">
                                         <Info className="w-3.5 h-3.5 text-cyan-400" />
@@ -387,7 +414,7 @@
                                 </div>
 
                                 {/* 手順2: 検証 */}
-                                <div className="space-y-3 pb-8 md:pb-0">
+                                <div className="space-y-3 pb-24 md:pb-0">
                                    <h3 className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
                                         <ShieldCheck className="w-3.5 h-3.5" /> 手順2: 証明書を発行
                                     </h3>
@@ -423,7 +450,7 @@
                                                誤差: ±{DELTA_PRICE_GLOBAL.toExponential(1)}
                                              </div>
                                            </div>
-                                           <div className="flex gap-2 text-[11px] font-mono text-emerald-200">
+                                           <div className="flex gap-2 text-[11px] font-mono text-emerald-200 mb-3">
                                              <div className="flex-1 bg-emerald-500/10 py-1.5 px-3 rounded flex justify-between items-center">
                                                <span className="opacity-50 text-[9px]">最小</span><span>{certRange.min.toFixed(5)}</span>
                                              </div>
@@ -431,6 +458,14 @@
                                                <span className="opacity-50 text-[9px]">最大</span><span>{certRange.max.toFixed(5)}</span>
                                              </div>
                                            </div>
+                                           
+                                           {/* スマホのみ: 台帳へ誘導するボタン */}
+                                           <button 
+                                             onClick={() => setActiveMobileTab('ledger')}
+                                             className="md:hidden w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                                           >
+                                             詳細台帳を確認する <ArrowRight className="w-3 h-3" />
+                                           </button>
                                          </div>
                                       ) : (
                                         <div className="pt-2 border-t border-slate-700 text-center text-[10px] text-slate-500">
@@ -443,29 +478,29 @@
                             </div>
                         </aside>
 
-                        {/* RIGHT PANE: 台帳 & ラボ */}
-                        <div className="flex-1 flex flex-col bg-slate-950 min-w-0">
+                        {/* RIGHT PANE: 台帳 & ラボ (スマホ: ledgerタブ時のみ, PC: 常時表示) */}
+                        <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 absolute md:relative inset-0 z-10 md:z-auto bg-slate-950 md:bg-transparent transition-opacity duration-200 ${activeMobileTab === 'ledger' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
                             
-                            {/* Tabs Navigation */}
+                            {/* Tabs Navigation (Pane Internal) */}
                             <div className="flex-shrink-0 px-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md h-12">
                                 <div className="flex gap-6 h-full">
                                     <button 
-                                        onClick={() => setActiveTab('live')}
-                                        className={`text-xs font-bold flex items-center gap-2 h-full border-b-2 transition-colors ${activeTab === 'live' ? 'text-white border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+                                        onClick={() => setActiveLedgerTab('live')}
+                                        className={`text-xs font-bold flex items-center gap-2 h-full border-b-2 transition-colors ${activeLedgerTab === 'live' ? 'text-white border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
                                     >
                                         <Database className="w-3.5 h-3.5" />
                                         証明台帳 (Live)
                                     </button>
                                     <button 
-                                        onClick={() => setActiveTab('import')}
-                                        className={`text-xs font-bold flex items-center gap-2 h-full border-b-2 transition-colors ${activeTab === 'import' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
+                                        onClick={() => setActiveLedgerTab('import')}
+                                        className={`text-xs font-bold flex items-center gap-2 h-full border-b-2 transition-colors ${activeLedgerTab === 'import' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
                                     >
                                         <Upload className="w-3.5 h-3.5" />
                                         外部ログ検証
                                     </button>
                                 </div>
                                 
-                                {activeTab === 'live' && (
+                                {activeLedgerTab === 'live' && (
                                     <div className="flex items-center gap-2">
                                         {result && (
                                             <button 
@@ -492,7 +527,7 @@
                             <div className="flex-1 overflow-hidden relative bg-slate-950">
                                 
                                 {/* TAB: 証明台帳 */}
-                                {activeTab === 'live' && (
+                                {activeLedgerTab === 'live' && (
                                     <div className="h-full overflow-auto table-container">
                                         <table className="w-full text-left border-collapse min-w-[600px] md:min-w-0">
                                             <thead className="sticky top-0 z-10">
@@ -547,15 +582,15 @@
                                                 ))}
                                             </tbody>
                                         </table>
-                                        <div className="mt-6 px-4 pb-12 md:pb-8 text-[10px] text-slate-600 text-center font-mono">
+                                        <div className="mt-6 px-4 pb-24 md:pb-8 text-[10px] text-slate-600 text-center font-mono">
                                             ルートハッシュ (Root Hash): <span className="text-slate-500 block md:inline mt-1 md:mt-0">{result?.rootHash}</span>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* TAB: 外部ログ検証 */}
-                                {activeTab === 'import' && (
-                                    <div className="h-full overflow-auto p-6 flex flex-col items-center justify-start gap-6">
+                                {activeLedgerTab === 'import' && (
+                                    <div className="h-full overflow-auto p-6 flex flex-col items-center justify-start gap-6 pb-24 md:pb-6">
                                         <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl p-6 text-center shadow-lg">
                                             <Upload className="w-10 h-10 text-slate-600 mx-auto mb-4" />
                                             <h3 className="text-sm font-bold text-slate-200 mb-2">外部ログ検証ラボ</h3>
