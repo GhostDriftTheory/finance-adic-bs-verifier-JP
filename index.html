@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BSモデル完全保証デモ v4.2</title>
+    <title>BSモデル完全保証デモ v4.3</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -58,14 +58,13 @@
         import { 
             ShieldCheck, Database, Calculator, Lock, CheckCircle, XCircle, 
             BookOpen, Info, Hash, Upload, Copy, Check, Download, RotateCcw,
-            ArrowRight, Settings, List
+            ArrowRight, Settings, List, FileCode, Server, Activity
         } from 'lucide-react';
 
         /**
-         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.2: Mobile UX Fixed)
-         * - スマホ初期表示を「説明・設定」タブに固定し、ファーストビューで目的を伝達
-         * - タブ切り替えUIを復活させ、情報の視認性を確保
-         * - Verify後の導線を強化
+         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.3: UX/Guidance Update)
+         * - Verify実行時の長時間処理に関する注釈を追加（フリーズ誤認防止）
+         * - 外部ログ検証ラボに、具体的な利用フロー図（Step 1-3）を追加
          */
 
         // --- 1. Global Certificate Constants ---
@@ -248,13 +247,13 @@
             const handleVerify = async () => {
                 if (!result) return;
                 setIsVerifying(true);
+                // Simulate delay - in real scenario this might take time
                 setTimeout(async () => {
                     const verifyResult = await verifyLedger(result.ledger);
                     setVerifiedLedger(verifyResult.rows);
                     setIsVerifying(false);
                     if (verifyResult.ok) {
                         setCertRange({ min: result.c_min, max: result.c_max });
-                        // 検証完了時にユーザーに気付かせる（タブ遷移は自動で行わないが、UIで誘導）
                     }
                 }, 600);
             };
@@ -262,7 +261,7 @@
             const handleDownload = () => {
                 if (!result) return;
                 const dataToSave = {
-                    kernel: "FinanceAdic-BS-v4.2-JP",
+                    kernel: "FinanceAdic-BS-v4.3-JP",
                     domain: DOMAIN_D,
                     delta_price_global: DELTA_PRICE_GLOBAL,
                     rootHash: result.rootHash,
@@ -318,7 +317,7 @@
                             </div>
                             <div>
                                 <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
-                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.2</span>
+                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.3</span>
                                 </h1>
                                 <p className="text-[10px] text-slate-400">構造可視化・完全保証デモ</p>
                             </div>
@@ -347,11 +346,11 @@
 
                     <main className="flex-1 flex overflow-hidden relative">
                         
-                        {/* LEFT PANE: 設定 & 証明 (スマホ: setupタブ時のみ, PC: 常時表示) */}
+                        {/* LEFT PANE: 設定 & 証明 */}
                         <aside className={`w-full md:w-[420px] border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/30 flex flex-col overflow-y-auto absolute md:relative inset-0 z-10 md:z-auto bg-slate-950 md:bg-transparent transition-opacity duration-200 ${activeMobileTab === 'setup' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
                             <div className="p-4 md:p-6 space-y-6">
                                 
-                                {/* 目的・意義 (最重要: ファーストビュー) */}
+                                {/* 目的・意義 */}
                                 <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 shadow-sm">
                                     <h2 className="text-xs font-bold text-white flex items-center gap-2 mb-3">
                                         <Info className="w-3.5 h-3.5 text-cyan-400" />
@@ -431,6 +430,13 @@
                                      {isVerifying ? <RotateCcw className="w-4 h-4 animate-spin" /> : verifiedLedger ? <Lock className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                                      {verifiedLedger ? '証明書の発行完了' : isVerifying ? '台帳を検証中...' : '検証を実行 (Verify)'}
                                    </button>
+                                   
+                                   {/* 長時間処理の注釈 (重要: フリーズ誤認防止) */}
+                                   {!verifiedLedger && (
+                                     <p className="text-[10px] text-slate-400 text-center leading-relaxed px-2">
+                                       ※ 検証では台帳の全行を再計算・ハッシュ検証するため、行数が多い場合は<strong className="text-slate-200">最長で約1〜2時間</strong>かかることがあります。処理完了まで画面を閉じないでください。
+                                     </p>
+                                   )}
 
                                    {result && (
                                     <div className={`p-4 rounded-xl border transition-all duration-500 ${certRange ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-slate-800/50 border-slate-700'}`}>
@@ -478,10 +484,10 @@
                             </div>
                         </aside>
 
-                        {/* RIGHT PANE: 台帳 & ラボ (スマホ: ledgerタブ時のみ, PC: 常時表示) */}
+                        {/* RIGHT PANE: 台帳 & ラボ */}
                         <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 absolute md:relative inset-0 z-10 md:z-auto bg-slate-950 md:bg-transparent transition-opacity duration-200 ${activeMobileTab === 'ledger' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
                             
-                            {/* Tabs Navigation (Pane Internal) */}
+                            {/* Tabs Navigation */}
                             <div className="flex-shrink-0 px-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md h-12">
                                 <div className="flex gap-6 h-full">
                                     <button 
@@ -598,6 +604,23 @@
                                                 別の環境（Python, Goなど）で出力された台帳データ(JSON)をここに貼り付けて、
                                                 その数学的正当性と改ざんの有無を独立して検証できます。
                                             </p>
+                                            
+                                            {/* 導入ガイド (3ステップ) */}
+                                            <div className="flex gap-2 mb-6 text-[10px] text-left">
+                                                <div className="flex-1 bg-slate-950 p-2 rounded border border-slate-800">
+                                                    <div className="text-indigo-400 font-bold mb-1 flex items-center gap-1">1. 出力</div>
+                                                    <div className="text-slate-500 text-[9px]">外部システムからログ(JSON)をExport</div>
+                                                </div>
+                                                <div className="flex-1 bg-slate-950 p-2 rounded border border-slate-800">
+                                                    <div className="text-indigo-400 font-bold mb-1 flex items-center gap-1">2. 貼付</div>
+                                                    <div className="text-slate-500 text-[9px]">JSONテキストを下のエリアにPaste</div>
+                                                </div>
+                                                <div className="flex-1 bg-slate-950 p-2 rounded border border-slate-800">
+                                                    <div className="text-indigo-400 font-bold mb-1 flex items-center gap-1">3. 監査</div>
+                                                    <div className="text-slate-500 text-[9px]">「検証」ボタンで不正をAudit</div>
+                                                </div>
+                                            </div>
+
                                             <textarea
                                                 className="w-full h-32 bg-slate-950 border border-slate-800 rounded-lg p-3 text-[10px] font-mono text-slate-400 mb-4 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
                                                 placeholder='JSONデータを貼り付けてください: { "ledger": [...] }'
