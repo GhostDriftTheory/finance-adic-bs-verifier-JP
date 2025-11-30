@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BSモデル完全保証デモ v4.5 (Interactive)</title>
+    <title>BSモデル完全保証デモ v4.7 (Intro Refined)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -58,14 +58,13 @@
         import { 
             ShieldCheck, Database, Calculator, Lock, CheckCircle, XCircle, 
             BookOpen, Info, Hash, Upload, Copy, Check, Download, RotateCcw,
-            ArrowRight, Settings, List, AlertTriangle, Zap
+            ArrowRight, Settings, List, AlertTriangle, Zap, ArrowLeft, Home
         } from 'lucide-react';
 
         /**
-         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.5: Interactive Highlight)
-         * - 各行に依存パラメータ情報(base)を追加
-         * - パラメータ変更時に依存行をハイライトする機能を追加
-         * - テーブル表示を「ハッシュ列」から「依存バッジ列」に変更して因果関係を可視化
+         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.7: Intro Refined)
+         * - 導入文を「体験ベース」の平易な表現に刷新
+         * - Finance ADIC Hubへの導線を導入エリア内に追加
          */
 
         // --- 1. Global Certificate Constants ---
@@ -96,7 +95,6 @@
         // Crypto Helper (Robust)
         const sha256 = async (message) => {
             if (!window.crypto || !window.crypto.subtle) {
-                // Fallback or Error for non-secure contexts (though mostly handled by catch block)
                 throw new Error("暗号化APIが使用できません。HTTPSまたはlocalhost環境で実行してください。");
             }
             const msgBuffer = new TextEncoder().encode(message);
@@ -112,7 +110,6 @@
             const idMap = new Map();
             let prevHash = '0'.repeat(64);
 
-            // ★ base 追加（どの入力に依存しているか）
             const record = async (op, desc, val, err, deps = [], interval = null, base = []) => {
                 const calculatedInterval = interval || [val - err, val + err];
                 const payload = { id: stepId, op, desc, value: val, error: err, deps };
@@ -123,7 +120,7 @@
                     id: stepId++, op, desc, value: val, error: err,
                     interval: calculatedInterval, deps, hash, prevHash,
                     verified: null, diff: 0,
-                    base // 依存パラメータ配列
+                    base
                 };
                 prevHash = hash;
                 ledger.push(row);
@@ -132,7 +129,6 @@
 
             const inputParams = { S, K, T, r, v };
             for (const [key, val] of Object.entries(inputParams)) {
-                // 各入力行は自分自身だけに依存
                 const row = await record('INPUT', `${key} (入力)`, val, 0, [], null, [key]);
                 idMap.set(key, row.id);
             }
@@ -141,92 +137,55 @@
 
             const id_S = getId('S'); const id_K = getId('K');
             const row_ln = await record(
-                'LOG', 
-                `対数収益率 ln(S/K)`, 
-                Math.log(getRow(id_S).value / getRow(id_K).value), 
-                ERR_BASE * 10, 
-                [id_S, id_K],
-                null,
-                ['S', 'K'] // 依存
+                'LOG', `対数収益率 ln(S/K)`, Math.log(getRow(id_S).value / getRow(id_K).value), 
+                ERR_BASE * 10, [id_S, id_K], null, ['S', 'K']
             );
 
             const id_r = getId('r'); const id_v = getId('v'); const id_T = getId('T');
             const val_r = getRow(id_r).value; const val_v = getRow(id_v).value; const val_T = getRow(id_T).value;
             const vol_term_val = (val_r + (val_v * val_v) / 2) * val_T;
             const row_vol_term = await record(
-                'MUL', 
-                `ボラティリティ項`, 
-                vol_term_val, 
-                ERR_BASE * 10, 
-                [id_r, id_v, id_T],
-                null,
-                ['r', 'v', 'T'] // 依存
+                'MUL', `ボラティリティ項`, vol_term_val, 
+                ERR_BASE * 10, [id_r, id_v, id_T], null, ['r', 'v', 'T']
             );
 
             const denom_val = val_v * Math.sqrt(val_T);
             const row_denom = await record(
-                'SQRT', 
-                `分母項 σ√T`, 
-                denom_val, 
-                ERR_BASE * 5, 
-                [id_v, id_T],
-                null,
-                ['v', 'T'] // 依存
+                'SQRT', `分母項 σ√T`, denom_val, 
+                ERR_BASE * 5, [id_v, id_T], null, ['v', 'T']
             );
 
             const d1_val = (row_ln.value + row_vol_term.value) / row_denom.value;
             const d1_err = (row_ln.error + row_vol_term.error) / row_denom.value + ERR_BASE; 
             const row_d1 = await record(
-                'D1', 
-                `パラメータ d1`, 
-                d1_val, 
-                d1_err, 
-                [row_ln.id, row_vol_term.id, row_denom.id],
-                null,
-                ['S', 'K', 'r', 'v', 'T'] // 全部
+                'D1', `パラメータ d1`, d1_val, d1_err, 
+                [row_ln.id, row_vol_term.id, row_denom.id], null, ['S', 'K', 'r', 'v', 'T']
             );
 
             const row_d2 = await record(
-                'D2', 
-                `パラメータ d2`, 
-                d1_val - row_denom.value, 
+                'D2', `パラメータ d2`, d1_val - row_denom.value, 
                 row_d1.error + row_denom.error + ERR_BASE, 
-                [row_d1.id, row_denom.id],
-                null,
-                ['S', 'K', 'r', 'v', 'T']
+                [row_d1.id, row_denom.id], null, ['S', 'K', 'r', 'v', 'T']
             );
 
             const nd1_val = normalCdf(d1_val);
             const row_nd1 = await record(
-                'CDF', 
-                `確率 N(d1)`, 
-                nd1_val, 
+                'CDF', `確率 N(d1)`, nd1_val, 
                 ERR_APPROX_NORMSDIST + (pdf(d1_val) * row_d1.error), 
-                [row_d1.id],
-                null,
-                ['S', 'K', 'r', 'v', 'T']
+                [row_d1.id], null, ['S', 'K', 'r', 'v', 'T']
             );
 
             const nd2_val = normalCdf(row_d2.value);
             const row_nd2 = await record(
-                'CDF', 
-                `確率 N(d2)`, 
-                nd2_val, 
+                'CDF', `確率 N(d2)`, nd2_val, 
                 ERR_APPROX_NORMSDIST + (pdf(row_d2.value) * row_d2.error), 
-                [row_d2.id],
-                null,
-                ['S', 'K', 'r', 'v', 'T']
+                [row_d2.id], null, ['S', 'K', 'r', 'v', 'T']
             );
 
             const disc_val = Math.exp(-val_r * val_T);
             const row_disc = await record(
-                'EXP', 
-                `割引係数`, 
-                disc_val, 
-                ERR_BASE * 10, 
-                [id_r, id_T],
-                null,
-                ['r', 'T']
+                'EXP', `割引係数`, disc_val, 
+                ERR_BASE * 10, [id_r, id_T], null, ['r', 'T']
             );
 
             const term1 = getRow(id_S).value * nd1_val;
@@ -235,13 +194,8 @@
             const price_err = DELTA_PRICE_GLOBAL; 
             
             const row_price = await record(
-                'PRICE', 
-                `理論価格 (Call)`, 
-                price_val, 
-                price_err, 
-                [id_S, row_nd1.id, id_K, row_disc.id, row_nd2.id],
-                null,
-                ['S', 'K', 'r', 'v', 'T']
+                'PRICE', `理論価格 (Call)`, price_val, price_err, 
+                [id_S, row_nd1.id, id_K, row_disc.id, row_nd2.id], null, ['S', 'K', 'r', 'v', 'T']
             );
 
             return { 
@@ -316,7 +270,6 @@
             const [importResult, setImportResult] = useState(null);
             const [isImportVerifying, setIsImportVerifying] = useState(false);
 
-            // ★ ハイライト用 state
             const [highlightParam, setHighlightParam] = useState(null);
 
             useEffect(() => { 
@@ -364,7 +317,7 @@
             const handleDownload = () => {
                 if (!result) return;
                 const dataToSave = {
-                    kernel: "FinanceAdic-BS-v4.5-JP",
+                    kernel: "FinanceAdic-BS-v4.7-JP",
                     domain: DOMAIN_D,
                     delta_price_global: DELTA_PRICE_GLOBAL,
                     rootHash: result.rootHash,
@@ -382,7 +335,6 @@
                 setVerifiedLedger(null); 
                 setCertRange(null);
 
-                // ★ パラメータ変更時にハイライト発火
                 setHighlightParam(key);
                 setTimeout(() => {
                     setHighlightParam(prev => (prev === key ? null : prev));
@@ -420,7 +372,6 @@
                 S: "株価 (S)", K: "行使価格 (K)", T: "期間 (年)", v: "変動率 (σ)", r: "金利 (r)"
             };
 
-            // バッジの色定義
             const baseBadgeClass = (p) => {
                 switch (p) {
                     case 'S': return "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
@@ -443,14 +394,17 @@
                             </div>
                             <div>
                                 <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
-                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.5</span>
+                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.7</span>
                                 </h1>
                                 <p className="text-[10px] text-slate-400">構造可視化・完全保証デモ</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-950/30 px-2 py-1 rounded-full border border-emerald-900/50">
-                            <Lock className="w-3 h-3" />
-                            <span className="font-medium">保護中</span>
+                        
+                        <div className="flex items-center gap-3">
+                            <div className="hidden md:flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-950/30 px-2 py-1 rounded-full border border-emerald-900/50">
+                                <Lock className="w-3 h-3" />
+                                <span className="font-medium">保護中</span>
+                            </div>
                         </div>
                     </header>
 
@@ -476,36 +430,55 @@
                         <aside className={`w-full md:w-[420px] border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/30 flex flex-col overflow-y-auto absolute md:relative inset-0 z-10 md:z-auto bg-slate-950 md:bg-transparent transition-opacity duration-200 ${activeMobileTab === 'setup' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto'}`}>
                             <div className="p-4 md:p-6 space-y-6">
                                 
-                                {/* 目的・意義 */}
+                                {/* 目的・意義 (Refined) */}
                                 <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 shadow-sm">
                                     <h2 className="text-xs font-bold text-white flex items-center gap-2 mb-3">
                                         <Info className="w-3.5 h-3.5 text-cyan-400" />
-                                        はじめに：信頼の起点として
+                                        はじめに：このデモの見方
                                     </h2>
                                     
                                     <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
                                         <div>
-                                            <strong className="text-slate-200 block mb-1">Q. 何が変わったのか？</strong>
-                                            計算結果を「その場の計算」ではなく、<strong className="text-emerald-300">「数学的に証明された誤差範囲」</strong>と<strong className="text-emerald-300">「改ざん検知チェーン」</strong>で二重に保証します。
+                                            <strong className="text-slate-200 block mb-1">Q. このデモで何がわかる？</strong>
+                                            ふつうの Black–Scholes 価格にくわえて、
+                                            <ol className="list-decimal list-inside mt-1 space-y-1 text-slate-400 pl-1">
+                                                <li>その価格が必ず入る<strong className="text-emerald-300">「安全な幅（誤差区間）」</strong>を数学的に保証し、</li>
+                                                <li>計算の全ステップを<strong className="text-emerald-300">「改ざんできない台帳」</strong>として保存・検証できること</li>
+                                            </ol>
+                                            <p className="mt-2">を体験できます。</p>
                                         </div>
                                         
                                         <div className="grid grid-cols-1 gap-2">
                                             <div className="bg-indigo-900/20 border border-indigo-500/20 rounded-lg p-2.5">
                                                 <div className="text-[10px] font-bold text-indigo-300 mb-1 flex items-center gap-1.5">
-                                                    <ShieldCheck className="w-3 h-3" /> 【効力】数学的な誤差保証
+                                                    <ShieldCheck className="w-3 h-3" /> 【誤差ごと保証される価格】
                                                 </div>
                                                 <span className="text-[10px] text-slate-400 block leading-snug">
-                                                    表示される誤差範囲は、デモ用の目安ではなく、入力可能な全範囲に対して数学的に証明された絶対的な安全圏です。
+                                                    表示される誤差範囲は、ただの目安ではなく、入力可能な全範囲に対して数学的に証明された「絶対的な安全圏」です。
                                                 </span>
                                             </div>
                                             <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-lg p-2.5">
                                                 <div className="text-[10px] font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
-                                                    <Hash className="w-3 h-3" /> 【耐性】改ざん検知チェーン
+                                                    <Hash className="w-3 h-3" /> 【改ざん検知チェーン】
                                                 </div>
                                                 <span className="text-[10px] text-slate-400 block leading-snug">
-                                                    台帳の各行は前の行の暗号ハッシュを含みます。1箇所でも改ざんされると、検証時に即座に検知されます。
+                                                    台帳の各行は前の行の暗号データを含みます。1箇所でも改ざんされると、即座に検知されます。
                                                 </span>
                                             </div>
+                                        </div>
+
+                                        {/* Hubへの誘導リンク (New) */}
+                                        <div className="pt-2 border-t border-slate-700/50 mt-1">
+                                            <a 
+                                                href="https://ghostdrifttheory.github.io/ghostdrift-finance-verifier-JP/"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center justify-center gap-2 w-full py-2 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg text-[10px] text-slate-200 transition-all font-bold group"
+                                            >
+                                                <BookOpen className="w-3 h-3 text-indigo-400" />
+                                                詳しい理論「Finance ADIC」はこちら
+                                                <ArrowRight className="w-3 h-3 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
