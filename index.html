@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BSモデル完全保証デモ(Stable)</title>
+    <title>BSモデル完全保証デモ v4.5 (Interactive)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -58,15 +58,14 @@
         import { 
             ShieldCheck, Database, Calculator, Lock, CheckCircle, XCircle, 
             BookOpen, Info, Hash, Upload, Copy, Check, Download, RotateCcw,
-            ArrowRight, Settings, List, AlertTriangle
+            ArrowRight, Settings, List, AlertTriangle, Zap
         } from 'lucide-react';
 
         /**
-         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.4: Stable & Robust)
-         * - 非同期処理のエラーハンドリングを強化し、無限ロード状態を防止
-         * - Crypto APIが使用できない環境（非SSL等）でのエラーメッセージを追加
-         * - 外部検証ラボのUIを微調整
-         * - v4.4.1 Fix: verifyLedgerでのReferenceError修正
+         * FinanceAdic: Black-Scholes Structure Visualizer & Guarantor (v4.5: Interactive Highlight)
+         * - 各行に依存パラメータ情報(base)を追加
+         * - パラメータ変更時に依存行をハイライトする機能を追加
+         * - テーブル表示を「ハッシュ列」から「依存バッジ列」に変更して因果関係を可視化
          */
 
         // --- 1. Global Certificate Constants ---
@@ -96,8 +95,8 @@
 
         // Crypto Helper (Robust)
         const sha256 = async (message) => {
-            // Check for Secure Context
             if (!window.crypto || !window.crypto.subtle) {
+                // Fallback or Error for non-secure contexts (though mostly handled by catch block)
                 throw new Error("暗号化APIが使用できません。HTTPSまたはlocalhost環境で実行してください。");
             }
             const msgBuffer = new TextEncoder().encode(message);
@@ -113,7 +112,8 @@
             const idMap = new Map();
             let prevHash = '0'.repeat(64);
 
-            const record = async (op, desc, val, err, deps = [], interval = null) => {
+            // ★ base 追加（どの入力に依存しているか）
+            const record = async (op, desc, val, err, deps = [], interval = null, base = []) => {
                 const calculatedInterval = interval || [val - err, val + err];
                 const payload = { id: stepId, op, desc, value: val, error: err, deps };
                 const payloadStr = JSON.stringify(payload);
@@ -122,7 +122,8 @@
                 const row = {
                     id: stepId++, op, desc, value: val, error: err,
                     interval: calculatedInterval, deps, hash, prevHash,
-                    verified: null, diff: 0
+                    verified: null, diff: 0,
+                    base // 依存パラメータ配列
                 };
                 prevHash = hash;
                 ledger.push(row);
@@ -131,42 +132,117 @@
 
             const inputParams = { S, K, T, r, v };
             for (const [key, val] of Object.entries(inputParams)) {
-                const row = await record('INPUT', `${key} (入力)`, val, 0, []);
+                // 各入力行は自分自身だけに依存
+                const row = await record('INPUT', `${key} (入力)`, val, 0, [], null, [key]);
                 idMap.set(key, row.id);
             }
             const getId = (key) => idMap.get(key);
             const getRow = (id) => ledger.find(r => r.id === id);
 
             const id_S = getId('S'); const id_K = getId('K');
-            const row_ln = await record('LOG', `対数収益率 ln(S/K)`, Math.log(getRow(id_S).value / getRow(id_K).value), ERR_BASE * 10, [id_S, id_K]);
+            const row_ln = await record(
+                'LOG', 
+                `対数収益率 ln(S/K)`, 
+                Math.log(getRow(id_S).value / getRow(id_K).value), 
+                ERR_BASE * 10, 
+                [id_S, id_K],
+                null,
+                ['S', 'K'] // 依存
+            );
 
             const id_r = getId('r'); const id_v = getId('v'); const id_T = getId('T');
             const val_r = getRow(id_r).value; const val_v = getRow(id_v).value; const val_T = getRow(id_T).value;
             const vol_term_val = (val_r + (val_v * val_v) / 2) * val_T;
-            const row_vol_term = await record('MUL', `ボラティリティ項`, vol_term_val, ERR_BASE * 10, [id_r, id_v, id_T]);
+            const row_vol_term = await record(
+                'MUL', 
+                `ボラティリティ項`, 
+                vol_term_val, 
+                ERR_BASE * 10, 
+                [id_r, id_v, id_T],
+                null,
+                ['r', 'v', 'T'] // 依存
+            );
 
             const denom_val = val_v * Math.sqrt(val_T);
-            const row_denom = await record('SQRT', `分母項 σ√T`, denom_val, ERR_BASE * 5, [id_v, id_T]);
+            const row_denom = await record(
+                'SQRT', 
+                `分母項 σ√T`, 
+                denom_val, 
+                ERR_BASE * 5, 
+                [id_v, id_T],
+                null,
+                ['v', 'T'] // 依存
+            );
 
             const d1_val = (row_ln.value + row_vol_term.value) / row_denom.value;
             const d1_err = (row_ln.error + row_vol_term.error) / row_denom.value + ERR_BASE; 
-            const row_d1 = await record('D1', `パラメータ d1`, d1_val, d1_err, [row_ln.id, row_vol_term.id, row_denom.id]);
-            const row_d2 = await record('D2', `パラメータ d2`, d1_val - row_denom.value, row_d1.error + row_denom.error + ERR_BASE, [row_d1.id, row_denom.id]);
+            const row_d1 = await record(
+                'D1', 
+                `パラメータ d1`, 
+                d1_val, 
+                d1_err, 
+                [row_ln.id, row_vol_term.id, row_denom.id],
+                null,
+                ['S', 'K', 'r', 'v', 'T'] // 全部
+            );
+
+            const row_d2 = await record(
+                'D2', 
+                `パラメータ d2`, 
+                d1_val - row_denom.value, 
+                row_d1.error + row_denom.error + ERR_BASE, 
+                [row_d1.id, row_denom.id],
+                null,
+                ['S', 'K', 'r', 'v', 'T']
+            );
 
             const nd1_val = normalCdf(d1_val);
-            const row_nd1 = await record('CDF', `確率 N(d1)`, nd1_val, ERR_APPROX_NORMSDIST + (pdf(d1_val) * row_d1.error), [row_d1.id]);
+            const row_nd1 = await record(
+                'CDF', 
+                `確率 N(d1)`, 
+                nd1_val, 
+                ERR_APPROX_NORMSDIST + (pdf(d1_val) * row_d1.error), 
+                [row_d1.id],
+                null,
+                ['S', 'K', 'r', 'v', 'T']
+            );
+
             const nd2_val = normalCdf(row_d2.value);
-            const row_nd2 = await record('CDF', `確率 N(d2)`, nd2_val, ERR_APPROX_NORMSDIST + (pdf(row_d2.value) * row_d2.error), [row_d2.id]);
+            const row_nd2 = await record(
+                'CDF', 
+                `確率 N(d2)`, 
+                nd2_val, 
+                ERR_APPROX_NORMSDIST + (pdf(row_d2.value) * row_d2.error), 
+                [row_d2.id],
+                null,
+                ['S', 'K', 'r', 'v', 'T']
+            );
 
             const disc_val = Math.exp(-val_r * val_T);
-            const row_disc = await record('EXP', `割引係数`, disc_val, ERR_BASE * 10, [id_r, id_T]);
+            const row_disc = await record(
+                'EXP', 
+                `割引係数`, 
+                disc_val, 
+                ERR_BASE * 10, 
+                [id_r, id_T],
+                null,
+                ['r', 'T']
+            );
 
             const term1 = getRow(id_S).value * nd1_val;
             const term2 = getRow(id_K).value * disc_val * nd2_val;
             const price_val = term1 - term2;
             const price_err = DELTA_PRICE_GLOBAL; 
             
-            const row_price = await record('PRICE', `理論価格 (Call)`, price_val, price_err, [id_S, row_nd1.id, id_K, row_disc.id, row_nd2.id]);
+            const row_price = await record(
+                'PRICE', 
+                `理論価格 (Call)`, 
+                price_val, 
+                price_err, 
+                [id_S, row_nd1.id, id_K, row_disc.id, row_nd2.id],
+                null,
+                ['S', 'K', 'r', 'v', 'T']
+            );
 
             return { 
                 price: price_val, error: price_err, ledger,
@@ -202,7 +278,6 @@
             let expectedPrevHash = '0'.repeat(64);
 
             for (const row of ledger) {
-                // Dependency check logic implies row is ordered.
                 let recomputedVal = (row.op === 'INPUT') ? row.value : recomputeRow(row, rowMap);
                 rowMap.set(row.id, row);
                 const diff = Math.abs(recomputedVal - row.value);
@@ -229,7 +304,7 @@
             const [params, setParams] = useState(DEFAULT_PARAMS);
             const [result, setResult] = useState(null);
             const [isVerifying, setIsVerifying] = useState(false);
-            const [errorMsg, setErrorMsg] = useState(null); // エラーメッセージ用
+            const [errorMsg, setErrorMsg] = useState(null); 
             const [verifiedLedger, setVerifiedLedger] = useState(null);
             const [certRange, setCertRange] = useState(null);
             
@@ -240,6 +315,9 @@
             const [importJson, setImportJson] = useState('');
             const [importResult, setImportResult] = useState(null);
             const [isImportVerifying, setIsImportVerifying] = useState(false);
+
+            // ★ ハイライト用 state
+            const [highlightParam, setHighlightParam] = useState(null);
 
             useEffect(() => { 
                 runCalculation().catch(e => {
@@ -265,11 +343,8 @@
                 setIsVerifying(true);
                 setErrorMsg(null);
                 
-                // setTimeoutではなくPromiseで遅延させ、try-catch-finallyで確実に状態を戻す
                 try {
-                    // UI更新のための微小な遅延
                     await new Promise(r => setTimeout(r, 100));
-                    
                     const verifyResult = await verifyLedger(result.ledger);
                     setVerifiedLedger(verifyResult.rows);
                     
@@ -289,7 +364,7 @@
             const handleDownload = () => {
                 if (!result) return;
                 const dataToSave = {
-                    kernel: "FinanceAdic-BS-v4.4-JP",
+                    kernel: "FinanceAdic-BS-v4.5-JP",
                     domain: DOMAIN_D,
                     delta_price_global: DELTA_PRICE_GLOBAL,
                     rootHash: result.rootHash,
@@ -304,7 +379,14 @@
 
             const handleParamChange = (key, val) => {
                 setParams(prev => ({ ...prev, [key]: parseFloat(val) }));
-                setVerifiedLedger(null); setCertRange(null);
+                setVerifiedLedger(null); 
+                setCertRange(null);
+
+                // ★ パラメータ変更時にハイライト発火
+                setHighlightParam(key);
+                setTimeout(() => {
+                    setHighlightParam(prev => (prev === key ? null : prev));
+                }, 800);
             };
 
             const copyRootHash = () => {
@@ -319,7 +401,6 @@
                 setIsImportVerifying(true); 
                 setImportResult(null);
                 try {
-                    // UI更新待ち
                     await new Promise(r => setTimeout(r, 50));
                     const data = JSON.parse(importJson);
                     if (!data.ledger || !Array.isArray(data.ledger)) throw new Error("形式が無効です");
@@ -339,6 +420,18 @@
                 S: "株価 (S)", K: "行使価格 (K)", T: "期間 (年)", v: "変動率 (σ)", r: "金利 (r)"
             };
 
+            // バッジの色定義
+            const baseBadgeClass = (p) => {
+                switch (p) {
+                    case 'S': return "bg-cyan-500/20 text-cyan-300 border-cyan-500/40";
+                    case 'K': return "bg-amber-500/20 text-amber-300 border-amber-500/40";
+                    case 'T': return "bg-rose-500/20 text-rose-300 border-rose-500/40";
+                    case 'v': return "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+                    case 'r': return "bg-sky-500/20 text-sky-300 border-sky-500/40";
+                    default:  return "bg-slate-700/50 text-slate-300 border-slate-600";
+                }
+            };
+
             return (
                 <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
                     
@@ -350,7 +443,7 @@
                             </div>
                             <div>
                                 <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
-                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.4</span>
+                                    BSモデル × ADIC <span className="text-emerald-400 text-xs">v4.5</span>
                                 </h1>
                                 <p className="text-[10px] text-slate-400">構造可視化・完全保証デモ</p>
                             </div>
@@ -443,6 +536,13 @@
                                             </div>
                                         ))}
                                     </div>
+                                    
+                                    {/* ハイライト説明注釈 */}
+                                    <p className="mt-2 text-[10px] text-slate-500 leading-relaxed px-1">
+                                      ※ スライダーを動かすと、右側（スマホはタブ切替後）の証明台帳のうち
+                                      <span className="text-cyan-300 font-bold mx-1">そのパラメータに依存する行だけ</span>
+                                      が一瞬ハイライトされます。
+                                    </p>
                                 </div>
 
                                 {/* 手順2: 検証 */}
@@ -584,7 +684,7 @@
                                                     <th className="px-3 py-2.5 w-16">操作</th>
                                                     <th className="px-3 py-2.5 w-auto">計算内容</th>
                                                     <th className="px-3 py-2.5 w-24 text-right">値</th>
-                                                    <th className="px-3 py-2.5 w-20 text-right">ハッシュ(冒頭)</th>
+                                                    <th className="px-3 py-2.5 w-28">依存パラメータ</th>
                                                     <th className="px-3 py-2.5 w-16 text-center">状態</th>
                                                 </tr>
                                             </thead>
@@ -592,7 +692,14 @@
                                                 {(verifiedLedger || (result ? result.ledger : [])).map((row) => (
                                                     <tr 
                                                         key={row.id} 
-                                                        className={`bg-slate-950 hover:bg-slate-900/50 transition-colors ${row.verified ? 'bg-emerald-900/10' : ''}`}
+                                                        className={[
+                                                            "bg-slate-950 hover:bg-slate-900/50 transition-colors duration-300",
+                                                            row.verified ? "bg-emerald-900/10" : "",
+                                                            // ハイライト対象なら背景とリングを適用
+                                                            (highlightParam && row.base && row.base.includes(highlightParam)) 
+                                                              ? "ring-1 ring-cyan-400/60 bg-cyan-950/40" 
+                                                              : ""
+                                                        ].join(" ")}
                                                     >
                                                         <td className="px-3 py-2.5 text-center text-slate-600">{row.id}</td>
                                                         <td className="px-3 py-2.5">
@@ -610,8 +717,14 @@
                                                         <td className="px-3 py-2.5 text-right text-slate-200 font-bold">
                                                             {Math.abs(row.value) < 0.01 && row.value !== 0 ? row.value.toExponential(2) : row.value.toFixed(3)}
                                                         </td>
-                                                        <td className="px-3 py-2.5 text-right text-slate-600 font-mono text-[9px]">
-                                                            {row.hash ? row.hash.substr(0, 6) : '-'}
+                                                        <td className="px-3 py-2.5">
+                                                            <div className="flex flex-wrap gap-1">
+                                                              {(row.base || []).map((p) => (
+                                                                <span key={p} className={"px-1.5 py-0.5 rounded-full text-[9px] border " + baseBadgeClass(p)}>
+                                                                  {p}
+                                                                </span>
+                                                              ))}
+                                                            </div>
                                                         </td>
                                                         <td className="px-3 py-2.5 text-center">
                                                             {row.verified === true ? (
