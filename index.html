@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BSモデル完全保証デモ v4.4 (Stable)</title>
+    <title>BSモデル完全保証デモ(Stable)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -66,6 +66,7 @@
          * - 非同期処理のエラーハンドリングを強化し、無限ロード状態を防止
          * - Crypto APIが使用できない環境（非SSL等）でのエラーメッセージを追加
          * - 外部検証ラボのUIを微調整
+         * - v4.4.1 Fix: verifyLedgerでのReferenceError修正
          */
 
         // --- 1. Global Certificate Constants ---
@@ -219,7 +220,7 @@
 
                 verifiedRows.push({ ...row, verified: numericOk && hashOk, diff });
             }
-            return { ok: allNumericOk && allHashOk, numericOk, hashOk: allHashOk, rows: verifiedRows, rootHash: expectedPrevHash };
+            return { ok: allNumericOk && allHashOk, numericOk: allNumericOk, hashOk: allHashOk, rows: verifiedRows, rootHash: expectedPrevHash };
         };
 
         // --- 5. UI Component ---
